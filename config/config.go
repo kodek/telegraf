@@ -293,11 +293,11 @@ type AgentConfig struct {
 	ConfigURLRetryAttempts int `toml:"config_url_retry_attempts"`
 
 	// BufferStrategy is the metric buffer type to use for a given output plugin.
-	// Supported types currently are "memory" and "disk".
+	// Supported types currently are "memory" and "disk_write_through" (alias: "disk").
 	BufferStrategy string `toml:"buffer_strategy"`
 
 	// BufferDirectory is the directory to store buffer files for serialized
-	// to disk metrics when using the "disk" buffer strategy.
+	// to disk metrics when using the "disk_write_through" buffer strategy.
 	BufferDirectory string `toml:"buffer_directory"`
 }
 
@@ -662,8 +662,8 @@ func (c *Config) LoadConfigData(data []byte, path string) error {
 
 	if len(c.UnusedFields) > 0 {
 		return fmt.Errorf(
-			"line %d: configuration specified the fields %q, but they were not used. "+
-				"This is either a typo or this config option does not exist in this version.",
+			"line %d: configuration specified the fields %q, but they were not used; "+
+				"this is either a typo or this config option does not exist in this version",
 			tbl.Line, keys(c.UnusedFields))
 	}
 
@@ -700,8 +700,8 @@ func (c *Config) LoadConfigData(data []byte, path string) error {
 				}
 				if len(c.UnusedFields) > 0 {
 					return fmt.Errorf(
-						"plugin %s.%s: line %d: configuration specified the fields %q, but they were not used. "+
-							"This is either a typo or this config option does not exist in this version.",
+						"plugin %s.%s: line %d: configuration specified the fields %q, but they were not used; "+
+							"this is either a typo or this config option does not exist in this version",
 						name, pluginName, subTable.Line, keys(c.UnusedFields))
 				}
 			}
@@ -725,8 +725,8 @@ func (c *Config) LoadConfigData(data []byte, path string) error {
 				}
 				if len(c.UnusedFields) > 0 {
 					return fmt.Errorf(
-						"plugin %s.%s: line %d: configuration specified the fields %q, but they were not used. "+
-							"This is either a typo or this config option does not exist in this version.",
+						"plugin %s.%s: line %d: configuration specified the fields %q, but they were not used; "+
+							"this is either a typo or this config option does not exist in this version",
 						name, pluginName, subTable.Line, keys(c.UnusedFields))
 				}
 			}
@@ -745,8 +745,8 @@ func (c *Config) LoadConfigData(data []byte, path string) error {
 				}
 				if len(c.UnusedFields) > 0 {
 					return fmt.Errorf(
-						"plugin %s.%s: line %d: configuration specified the fields %q, but they were not used. "+
-							"This is either a typo or this config option does not exist in this version.",
+						"plugin %s.%s: line %d: configuration specified the fields %q, but they were not used; "+
+							"this is either a typo or this config option does not exist in this version",
 						name,
 						pluginName,
 						subTable.Line,
@@ -769,8 +769,8 @@ func (c *Config) LoadConfigData(data []byte, path string) error {
 				}
 				if len(c.UnusedFields) > 0 {
 					return fmt.Errorf(
-						"plugin %s.%s: line %d: configuration specified the fields %q, but they were not used. "+
-							"This is either a typo or this config option does not exist in this version.",
+						"plugin %s.%s: line %d: configuration specified the fields %q, but they were not used; "+
+							"this is either a typo or this config option does not exist in this version",
 						name, pluginName, subTable.Line, keys(c.UnusedFields))
 				}
 			}
@@ -787,8 +787,8 @@ func (c *Config) LoadConfigData(data []byte, path string) error {
 					return fmt.Errorf("unsupported config format: %s", pluginName)
 				}
 				if len(c.UnusedFields) > 0 {
-					msg := "plugin %s.%s: line %d: configuration specified the fields %q, but they were not used. " +
-						"This is either a typo or this config option does not exist in this version."
+					msg := "plugin %s.%s: line %d: configuration specified the fields %q, but they were not used; " +
+						"this is either a typo or this config option does not exist in this version"
 					return fmt.Errorf(msg, name, pluginName, subTable.Line, keys(c.UnusedFields))
 				}
 			}
@@ -1652,11 +1652,16 @@ func (c *Config) buildOutput(name, source string, tbl *ast.Table) (*models.Outpu
 	if err != nil {
 		return nil, err
 	}
+
+	bufferStrategy := c.Agent.BufferStrategy
+	if bufferStrategy == "disk" {
+		bufferStrategy = "disk_write_through"
+	}
 	oc := &models.OutputConfig{
 		Name:            name,
 		Source:          source,
 		Filter:          filter,
-		BufferStrategy:  c.Agent.BufferStrategy,
+		BufferStrategy:  bufferStrategy,
 		BufferDirectory: c.Agent.BufferDirectory,
 	}
 
@@ -1677,8 +1682,8 @@ func (c *Config) buildOutput(name, source string, tbl *ast.Table) (*models.Outpu
 		return nil, c.firstErr()
 	}
 
-	if oc.BufferStrategy == "disk" {
-		log.Printf("W! Using disk buffer strategy for plugin outputs.%s, this is an experimental feature", name)
+	if oc.BufferStrategy == "disk_write_through" {
+		log.Printf("W! Using disk-write-through buffer strategy for plugin outputs.%s, this is an experimental feature", name)
 	}
 
 	// Generate an ID for the plugin

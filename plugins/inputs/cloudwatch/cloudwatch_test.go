@@ -32,12 +32,12 @@ func TestGather(t *testing.T) {
 		CredentialConfig: common_aws.CredentialConfig{
 			Region: "us-east-1",
 		},
-		Namespace: "AWS/ELB",
-		Delay:     config.Duration(1 * time.Minute),
-		Period:    config.Duration(1 * time.Minute),
-		RateLimit: 200,
-		BatchSize: 500,
-		Log:       testutil.Logger{},
+		Namespaces: []string{"AWS/ELB"},
+		Delay:      config.Duration(1 * time.Minute),
+		Period:     config.Duration(1 * time.Minute),
+		RateLimit:  200,
+		BatchSize:  500,
+		Log:        testutil.Logger{},
 	}
 	require.NoError(t, plugin.Init())
 	plugin.client = defaultMockClient("AWS/ELB")
@@ -86,7 +86,7 @@ func TestGatherDenseMetric(t *testing.T) {
 		CredentialConfig: common_aws.CredentialConfig{
 			Region: "us-east-1",
 		},
-		Namespace:    "AWS/ELB",
+		Namespaces:   []string{"AWS/ELB"},
 		Delay:        config.Duration(1 * time.Minute),
 		Period:       config.Duration(1 * time.Minute),
 		RateLimit:    200,
@@ -143,7 +143,7 @@ func TestMultiAccountGather(t *testing.T) {
 		CredentialConfig: common_aws.CredentialConfig{
 			Region: "us-east-1",
 		},
-		Namespace:             "AWS/ELB",
+		Namespaces:            []string{"AWS/ELB"},
 		Delay:                 config.Duration(1 * time.Minute),
 		Period:                config.Duration(1 * time.Minute),
 		RateLimit:             200,
@@ -289,11 +289,11 @@ func TestSelectMetrics(t *testing.T) {
 		CredentialConfig: common_aws.CredentialConfig{
 			Region: "us-east-1",
 		},
-		Namespace: "AWS/ELB",
-		Delay:     config.Duration(1 * time.Minute),
-		Period:    config.Duration(1 * time.Minute),
-		RateLimit: 200,
-		BatchSize: 500,
+		Namespaces: []string{"AWS/ELB"},
+		Delay:      config.Duration(1 * time.Minute),
+		Period:     config.Duration(1 * time.Minute),
+		RateLimit:  200,
+		BatchSize:  500,
 		Metrics: []*cloudwatchMetric{
 			{
 				MetricNames: []string{"Latency", "RequestCount"},
@@ -314,10 +314,44 @@ func TestSelectMetrics(t *testing.T) {
 	require.NoError(t, plugin.Init())
 	plugin.client = selectedMockClient()
 	filtered, err := plugin.getFilteredMetrics()
+	require.NoError(t, err)
+
 	// We've asked for 2 (out of 4) metrics, over all 3 load balancers in all 2
 	// AZs. We should get 12 metrics.
 	require.Len(t, filtered[0].metrics, 12)
+}
+
+func TestSelectMetricsSummaryOnly(t *testing.T) {
+	plugin := &CloudWatch{
+		CredentialConfig: common_aws.CredentialConfig{
+			Region: "us-east-1",
+		},
+		Namespaces: []string{"AWS/ELB"},
+		Delay:      config.Duration(1 * time.Minute),
+		Period:     config.Duration(1 * time.Minute),
+		RateLimit:  200,
+		BatchSize:  500,
+		Metrics: []*cloudwatchMetric{
+			{
+				MetricNames: []string{"Latency", "RequestCount"},
+				Dimensions: []*dimension{
+					{
+						Name:  "LoadBalancerName",
+						Value: "lb*",
+					},
+				},
+			},
+		},
+		Log: testutil.Logger{},
+	}
+	require.NoError(t, plugin.Init())
+	plugin.client = selectedMockClient()
+	filtered, err := plugin.getFilteredMetrics()
 	require.NoError(t, err)
+
+	// We've asked for the non-AU specific metrics only so this should be
+	// 2 (out of 4) metrics for all 3 load balancers but no AZ.
+	require.Len(t, filtered[0].metrics, 6)
 }
 
 func TestGenerateStatisticsInputParams(t *testing.T) {
@@ -418,11 +452,11 @@ func TestMetricsCacheTimeout(t *testing.T) {
 
 func TestUpdateWindow(t *testing.T) {
 	plugin := &CloudWatch{
-		Namespace: "AWS/ELB",
-		Delay:     config.Duration(1 * time.Minute),
-		Period:    config.Duration(1 * time.Minute),
-		BatchSize: 500,
-		Log:       testutil.Logger{},
+		Namespaces: []string{"AWS/ELB"},
+		Delay:      config.Duration(1 * time.Minute),
+		Period:     config.Duration(1 * time.Minute),
+		BatchSize:  500,
+		Log:        testutil.Logger{},
 	}
 
 	now := time.Now()
@@ -462,14 +496,13 @@ func TestProxyFunction(t *testing.T) {
 
 func TestCombineNamespaces(t *testing.T) {
 	plugin := &CloudWatch{
-		Namespace:  "AWS/ELB",
 		Namespaces: []string{"AWS/EC2", "AWS/Billing"},
 		BatchSize:  500,
 		Log:        testutil.Logger{},
 	}
 
 	require.NoError(t, plugin.Init())
-	require.Equal(t, []string{"AWS/EC2", "AWS/Billing", "AWS/ELB"}, plugin.Namespaces)
+	require.Equal(t, []string{"AWS/EC2", "AWS/Billing"}, plugin.Namespaces)
 }
 
 // INTERNAL mock client implementation
